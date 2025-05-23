@@ -48,6 +48,8 @@ from .sim_ground_utils import (
     add_solar_intervals,
     oscillate_el,
     simulate_ces_scan,
+    wrap_to_pi,
+    simulate_ces_scan_tot,
     simulate_elnod,
     step_el,
 )
@@ -910,15 +912,15 @@ class SimGround(Operator):
             ival_turn_rightleft,
             ival_throw_leftright,
             ival_throw_rightleft,
-        ) = simulate_ces_scan(
+        ) = simulate_ces_scan_tot(
             site,
             start_time.timestamp(),
             stop_time.timestamp(),
             rate,
             scan.el.to_value(u.radian),
-            scan.az_min.to_value(u.radian),
-            scan.az_max.to_value(u.radian),
-            scan.az_min.to_value(u.radian),
+            wrap_to_pi(scan.az_min.to_value(u.radian)),
+            wrap_to_pi(scan.az_max.to_value(u.radian)),
+            wrap_to_pi(scan.az_min.to_value(u.radian)),
             self.scan_rate_az.to_value(u.radian / u.second),
             self.fix_rate_on_sky,
             self.scan_accel_az.to_value(u.radian / u.second**2),

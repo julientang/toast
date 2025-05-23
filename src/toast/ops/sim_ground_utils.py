@@ -401,6 +401,364 @@ def step_el(
 
     return new_min_el, new_max_el
 
+@function_timer
+def wrap_to_pi(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+@function_timer
+def scan_segment_leftright(az_start, az_end, t0, omega,nstep=10000):
+        cos_diff = np.cos(az_end) - np.cos(az_start)
+        duration = cos_diff / omega
+        t = np.linspace(t0, t0 + duration, nstep)
+        t_real=np.linspace(t0, t0 + np.abs(duration), nstep)
+        if az_start <= 0 and az_end <= 0:
+            az = -np.arccos(np.cos(az_start) + omega * (t - t0))
+        elif az_start >= 0 and az_end >= 0:
+            az = np.arccos(np.cos(az_start) + omega * (t - t0))
+        else:
+            raise ValueError("scan_segment_leftright should not be used across the meridian.")
+        return (t_real, az)
+
+@function_timer
+def scan_segment_rightleft(az_start, az_end, t0, omega,nstep=10000):
+    cos_diff = np.cos(az_start) - np.cos(az_end)
+    duration = cos_diff / omega
+    print('Duration')
+    print(duration)
+    t = np.linspace(t0, t0 + duration, nstep)
+    t_real=np.linspace(t0, t0 + np.abs(duration), nstep)
+    if az_start <= 0 and az_end <= 0:
+        az = -np.arccos(np.cos(az_start) - omega * (t - t0))
+    elif az_start >= 0 and az_end >= 0:
+        az = np.arccos(np.cos(az_start) - omega * (t - t0))
+    else:
+        raise ValueError("scan_segment_rightleft should not be used across the meridian.")
+    return (t_real, az)
+
+@function_timer
+def simulate_ces_scan_tot(
+    site,
+    t_start,
+    t_stop,
+    rate,
+    el,
+    az_min,
+    az_max,
+    az_start,
+    az_rate,
+    fix_rate_on_sky,
+    az_accel,
+    scan_min_az,
+    scan_max_az,
+    cosecant_modulation=False,
+    nstep=10000,
+    randomize_phase=False,
+    track_azimuth=False,
+):
+    """Simulate a constant elevation scan."""
+
+    mirror_cosecant = False
+    if cosecant_modulation:
+        # if az_min > np.pi:
+        #     mirror_cosecant = True
+        az_min=wrap_to_pi(az_min)
+        az_max=wrap_to_pi(az_max)
+    elif az_max < az_min:
+        az_max += 2 * np.pi
+
+    if fix_rate_on_sky:
+        base_rate = np.minimum(az_rate / np.clip(np.cos(el), 1e-6, None), az_rate * 10)
+    else:
+        base_rate = az_rate
+    scan_accel = az_accel
+
+    if cosecant_modulation:
+        if az_min*az_max>0:
+            scan_time = np.abs(np.cos(az_min) - np.cos(az_max))/ base_rate
+        else:
+            scan_time = (np.abs(np.cos(az_min) - 1)+np.abs(np.cos(az_max) - 1))/ base_rate
+        dazdt = np.minimum(base_rate / np.clip(np.abs(np.sin(az_min)), 1e-6, None), base_rate * 10)
+    else:
+        scan_time = (az_max - az_min) / base_rate
+        dazdt = base_rate
+
+    turnaround_time = 2 * dazdt / scan_accel
+    scan_pair_time = 2 * scan_time + 2 * turnaround_time
+
+    if track_azimuth:
+        if cosecant_modulation:
+            raise RuntimeError("Azimuth tracking and cosecant modulation are incompatible")
+        observer = ephem.Observer()
+        observer.lon = site.earthloc.lon.to_value(u.radian)
+        observer.lat = site.earthloc.lat.to_value(u.radian)
+        observer.elevation = site.earthloc.height.to_value(u.meter)
+        observer.epoch = ephem.J2000
+        observer.compute_pressure()
+        observer.date = to_DJD(t_start)
+        observer.pressure = 0
+        az = 0.5 * (az_min + az_max)
+        ra, dec = observer.radec_of(az, el)
+        center = ephem.FixedBody()
+        center._ra = ra
+        center._dec = dec
+        observer.date = to_DJD(t_start + 1)
+        center.compute(observer)
+        az2, el2 = center.az, center.alt
+        az_drift_rate = az2 - az
+        az_drift = az_drift_rate * (scan_time + turnaround_time)
+        drift_time = az_drift / base_rate
+    else:
+        az_drift = 0
+        drift_time = 0
+
+    all_t, all_az = [], []
+
+    ## LEFT-TO-RIGHT
+    t0 = t_start
+    if cosecant_modulation:
+        if az_min < az_max:
+            if az_max < 0 or az_min > 0:
+                # Both on the same side of meridian
+                tvec, azvec = scan_segment_leftright(az_min, az_max, t0, base_rate)
+            else:
+                # az_min < 0 < az_max → two segments
+                tvec1, azvec1 = scan_segment_leftright(az_min, 0.0, t0, base_rate)
+                tvec2, azvec2 = scan_segment_leftright(0.0, az_max, tvec1[-1], base_rate)
+                tvec = np.concatenate((tvec1, tvec1[-1]+tvec2- tvec2[0]))
+                azvec = np.concatenate((azvec1, azvec2))
+        else:
+            # az_max < az_min → full wrap-around (meridian crossing)
+            if az_min < 0:
+                # az_min < 0 and az_max < az_min → az_min to 0, 0 to pi, -pi to az_max
+                tvec1, azvec1 = scan_segment_leftright(az_min, 0.0, t0, base_rate)
+                tvec2, azvec2 = scan_segment_leftright(0.0, np.pi, tvec1[-1], base_rate)
+                tvec3, azvec3 = scan_segment_leftright(-np.pi, az_max, tvec2[-1], base_rate)
+                tvec=np.concatenate((
+                        tvec1,
+                        tvec2 - tvec2[0] + tvec1[-1],
+                        tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
+                    ))
+                azvec = np.concatenate((azvec1, azvec2, azvec3))
+            else:
+                if az_max < 0:
+                    # az_min < 0 < az_max → two segments
+                    tvec1, azvec1 = scan_segment_leftright(az_min, np.pi, t0, base_rate)
+                    tvec2, azvec2 = scan_segment_leftright(-np.pi, az_max, tvec1[-1], base_rate)
+                    tvec = np.concatenate((tvec1, tvec1[-1]+tvec2- tvec2[0]))
+                    azvec = np.concatenate((azvec1, azvec2))
+                if az_max>0:
+                    # az_min > 0 → az_min to pi, -pi to 0, 0 to az_max
+                    tvec1, azvec1 = scan_segment_leftright(az_min, np.pi, t0, base_rate)
+                    tvec2, azvec2 = scan_segment_leftright(-np.pi, 0.0, tvec1[-1], base_rate)
+                    tvec3, azvec3 = scan_segment_leftright(0.0, az_max, tvec2[-1], base_rate)
+                    tvec=np.concatenate((
+                        tvec1,
+                        tvec2 - tvec2[0] + tvec1[-1],
+                        tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
+                    ))
+                    azvec = np.concatenate((azvec1, azvec2, azvec3))
+    else:
+        t1 = t0 + scan_time + drift_time
+        tvec = np.array([t0, t1])
+        azvec = np.array([az_min, az_max + az_drift]) 
+    range_scan_leftright = (tvec[0], tvec[-1])
+    all_t.append(tvec)
+    all_az.append(azvec)
+
+    # TURNAROUND
+    t0 = tvec[-1]
+    az0 = az_max + az_drift
+    t1 = t0 + turnaround_time
+    tvec = np.linspace(t0, t1, nstep)[1:]
+    azvec = az0 + (tvec - t0) * dazdt - 0.5 * scan_accel * (tvec - t0) ** 2
+    all_t.append(tvec[:-1])
+    all_az.append(azvec[:-1])
+    range_turn_leftright = (t0, t1)
+
+    # RIGHT-TO-LEFT
+    t0 = t1
+    if cosecant_modulation:
+        if az_min < az_max:
+            if az_max < 0 or az_min > 0:
+                # Both on same side of meridian — simple inverse scan
+                tvec, azvec = scan_segment_rightleft(az_max, az_min, t0, base_rate)
+            else:
+                # az_min < 0 < az_max → two segments
+                tvec1, azvec1 = scan_segment_rightleft(az_max, 0.0, t0, base_rate)
+                tvec2, azvec2 = scan_segment_rightleft(0.0, az_min, tvec1[-1], base_rate)
+                tvec = np.concatenate((tvec1, tvec2+tvec1[-1]-tvec2[0]))
+                azvec = np.concatenate((azvec1, azvec2))
+        else:
+            # az_max < az_min → full wrap-around, 3 segments
+            if az_min < 0:
+                # az_max < az_min < 0 → scan: az_max → -π, π → 0, 0 → az_min
+                tvec1, azvec1 = scan_segment_rightleft(az_max, -np.pi, t0, base_rate)
+                tvec2, azvec2 = scan_segment_rightleft(np.pi, 0.0, tvec1[-1], base_rate)
+                tvec3, azvec3 = scan_segment_rightleft(0.0, az_min, tvec2[-1], base_rate)
+            else:
+                # 0 < az_max < az_min → scan: az_max → 0, 0 → -π, π → az_min
+                tvec1, azvec1 = scan_segment_rightleft(az_max, 0.0, t0, base_rate)
+                tvec2, azvec2 = scan_segment_rightleft(0.0, -np.pi, tvec1[-1], base_rate)
+                tvec3, azvec3 = scan_segment_rightleft(np.pi, az_min, tvec2[-1], base_rate)
+            tvec=np.concatenate((
+                                tvec1,
+                                tvec2 - tvec2[0] + tvec1[-1],
+                                tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
+                            ))            
+            azvec = np.concatenate((azvec1, azvec2, azvec3))
+    else:
+        t1 = t0 + scan_time - drift_time
+        tvec = np.array([t0, t1])
+        azvec = np.array([az_max + az_drift, az_min + 2 * az_drift])
+
+    range_scan_rightleft = (tvec[0], tvec[-1])
+    all_t.append(tvec)
+    all_az.append(azvec)
+
+    # TURNAROUND
+    t0 = tvec[-1]
+    az0 = az_min + 2 * az_drift
+    t1 = t0 + turnaround_time
+    tvec = np.linspace(t0, t1, nstep)[1:]
+    azvec = az0 - (tvec - t0) * dazdt + 0.5 * scan_accel * (tvec - t0) ** 2
+    all_t.append(tvec)
+    all_az.append(azvec)
+    range_turn_rightleft = (t0, t1)
+
+    # Concatenate
+    tvec = np.hstack(all_t)
+    azvec = np.hstack(all_az)
+    # Limit azimuth to [-pi, pi] but do not 
+    azvec=wrap_to_pi(azvec)
+    if mirror_cosecant:
+        # We always simulate a rising cosecant scan and then
+        # mirror it if necessary
+        azvec += np.pi
+
+    # Duplicate the first scan enough times to cover the entire observation
+    scan_pair_time=np.abs(tvec[-1]-tvec[0])
+    n_repeat = int((t_stop - t_start) / scan_pair_time)
+    print(n_repeat)
+    n_repeat += 2  # Margin for incomplete scans and randomized phase
+    ## Mirror the arrays before repeating them
+    tvec = tvec[:-1]
+    azvec = azvec[:-1] 
+    # Trim the last sample to avoid duplicated time stamps
+    ## Mirror the arrays before repeating them
+    t = []
+    az = [] 
+    for i in range(n_repeat):
+        t.append(tvec + i * scan_pair_time)
+        az.append(azvec + i * 2 * az_drift)
+
+    tvec = np.hstack(t)
+    azvec = np.hstack(az)
+    # return (tvec,azvec)
+    # Update the scan range.  We use the high resolution azimuth so the
+    # actual sampling rate will not change the range.
+    # These values will be slightly off in the case of an az-tracking
+    # scan because we are not considering the possible randomized phase
+    # offset and we include the extra half-scan pair that partially gets
+    # trimmed
+
+    new_min_az = min(scan_min_az, np.min(azvec))
+    new_max_az = max(scan_max_az, np.max(azvec))
+
+    # Now interpolate the simulated scan to timestamps.  The start time and
+    # sample rate are enforced and the stop time is adjusted if needed to
+    # produce a whole number of samples.
+
+    samples = int((t_stop - t_start) * rate)
+    times = t_start + np.arange(samples) / rate
+
+    if randomize_phase:
+        np.random.seed(int(t_start % 2**32))
+        t_off = scan_pair_time * np.random.rand()
+    else:
+        t_off = 0
+
+    # Interpolate to sample times
+    az_sample = np.interp(times + t_off, tvec, azvec)
+    el_sample = np.zeros_like(az_sample) + el
+
+    # The time intervals for various types of motion.  These are returned
+    # and can be used to construct IntervalLists by the calling code.
+    ival_scan_leftright = list()
+    ival_scan_rightleft = list()
+    ival_turn_leftright = list()
+    ival_turn_rightleft = list()
+    ival_throw_leftright = list()
+    ival_throw_rightleft = list()
+    ival_scan = list()
+
+    # Repeat time intervals to cover the timestamps
+    t_off = -t_off
+    for rp in range(n_repeat):
+        ival_scan_leftright.append(
+            (range_scan_leftright[0] + t_off, range_scan_leftright[1] + t_off)
+        )
+        ival_turn_leftright.append(
+            (range_turn_leftright[0] + t_off, range_turn_leftright[1] + t_off)
+        )
+        ival_scan_rightleft.append(
+            (range_scan_rightleft[0] + t_off, range_scan_rightleft[1] + t_off)
+        )
+        ival_turn_rightleft.append(
+            (range_turn_rightleft[0] + t_off, range_turn_rightleft[1] + t_off)
+        )
+        half_turn_leftright = 0.5 * (range_turn_leftright[1] - range_turn_leftright[0])
+        half_turn_rightleft = 0.5 * (range_turn_rightleft[1] - range_turn_rightleft[0])
+        ival_throw_leftright.append(
+            (
+                range_scan_leftright[0] + t_off - half_turn_rightleft,
+                range_scan_leftright[1] + t_off + half_turn_leftright,
+            )
+        )
+        ival_throw_rightleft.append(
+            (
+                range_scan_rightleft[0] + t_off - half_turn_leftright,
+                range_scan_rightleft[1] + t_off + half_turn_rightleft,
+            )
+        )
+        t_off += scan_pair_time
+
+    # Trim off the intervals if they extend past the timestamps
+    for ival in [
+        ival_scan_leftright,
+        ival_scan_rightleft,
+        ival_turn_leftright,
+        ival_turn_rightleft,
+        ival_throw_leftright,
+        ival_throw_rightleft,
+    ]:
+        first = tuple(ival[-1])
+        if first[1] < times[0]:
+            # Whole interval before the start
+            del ival[0]
+        elif first[0] < times[0]:
+            # interval is truncated
+            ival[0] = (times[0], first[1])
+        last = tuple(ival[-1])
+        if last[0] > times[-1]:
+            # Whole interval beyond the end
+            del ival[-1]
+        elif last[1] > times[-1]:
+            # interval is truncated
+            ival[-1] = (last[0], times[-1])
+
+    return (
+        times,
+        az_sample,
+        el_sample,
+        new_min_az,
+        new_max_az,
+        ival_scan_leftright,
+        ival_turn_leftright,
+        ival_scan_rightleft,
+        ival_turn_rightleft,
+        ival_throw_leftright,
+        ival_throw_rightleft,
+    )
 
 @function_timer
 def simulate_ces_scan(
@@ -435,16 +793,16 @@ def simulate_ces_scan(
             mirror_cosecant = True
         az_min %= np.pi
         az_max %= np.pi
-        if az_min > az_max:
-            raise RuntimeError(
-                "Cannot scan across zero meridian with cosecant-modulated scan"
-            )
+        # if az_min > az_max:
+        #     raise RuntimeError(
+        #         "Cannot scan across zero meridian with cosecant-modulated scan"
+        #     )
     elif az_max < az_min:
         az_max += 2 * np.pi
 
     if fix_rate_on_sky:
-        # translate scan rate from sky to mount coordinates
-        base_rate = az_rate / np.cos(el)
+        # Safe scan rate in mount coordinates
+        base_rate = np.minimum(az_rate / np.clip(np.cos(el), 1e-6, None), az_rate * 10)
     else:
         # azimuthal rate is already in mount coordinates
         base_rate = az_rate
@@ -455,7 +813,7 @@ def simulate_ces_scan(
     if cosecant_modulation:
         scan_time = (np.cos(az_min) - np.cos(az_max)) / base_rate
         # Scan rate at the beginning of a turnaround
-        dazdt = base_rate / np.abs(np.sin(az_min))
+        dazdt = np.minimum(base_rate / np.clip(np.abs(np.sin(az_min)), 1e-6, None), base_rate * 10)
     else:
         # Constant scanning rate, only requires two data points
         scan_time = (az_max - az_min) / base_rate
