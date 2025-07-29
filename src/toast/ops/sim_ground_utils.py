@@ -423,8 +423,6 @@ def scan_segment_leftright(az_start, az_end, t0, omega,nstep=10000):
 def scan_segment_rightleft(az_start, az_end, t0, omega,nstep=10000):
     cos_diff = np.cos(az_start) - np.cos(az_end)
     duration = cos_diff / omega
-    print('Duration')
-    print(duration)
     t = np.linspace(t0, t0 + duration, nstep)
     t_real=np.linspace(t0, t0 + np.abs(duration), nstep)
     if az_start <= 0 and az_end <= 0:
@@ -595,17 +593,30 @@ def simulate_ces_scan_tot(
                 tvec1, azvec1 = scan_segment_rightleft(az_max, -np.pi, t0, base_rate)
                 tvec2, azvec2 = scan_segment_rightleft(np.pi, 0.0, tvec1[-1], base_rate)
                 tvec3, azvec3 = scan_segment_rightleft(0.0, az_min, tvec2[-1], base_rate)
+                tvec=np.concatenate((
+                                    tvec1,
+                                    tvec2 - tvec2[0] + tvec1[-1],
+                                    tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
+                                ))            
+                azvec = np.concatenate((azvec1, azvec2, azvec3))
             else:
-                # 0 < az_max < az_min → scan: az_max → 0, 0 → -π, π → az_min
-                tvec1, azvec1 = scan_segment_rightleft(az_max, 0.0, t0, base_rate)
-                tvec2, azvec2 = scan_segment_rightleft(0.0, -np.pi, tvec1[-1], base_rate)
-                tvec3, azvec3 = scan_segment_rightleft(np.pi, az_min, tvec2[-1], base_rate)
-            tvec=np.concatenate((
-                                tvec1,
-                                tvec2 - tvec2[0] + tvec1[-1],
-                                tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
-                            ))            
-            azvec = np.concatenate((azvec1, azvec2, azvec3))
+                if az_max<0:
+                    # az_min < 0 < az_max → two segments
+                    tvec1, azvec1 = scan_segment_rightleft(az_max, -np.pi, t0, base_rate)
+                    tvec2, azvec2 = scan_segment_rightleft(np.pi, az_min, tvec1[-1], base_rate)
+                    tvec = np.concatenate((tvec1, tvec2+tvec1[-1]-tvec2[0]))
+                    azvec = np.concatenate((azvec1, azvec2))
+                else:
+                    # 0 < az_max < az_min → scan: az_max → 0, 0 → -π, π → az_min
+                    tvec1, azvec1 = scan_segment_rightleft(az_max, 0.0, t0, base_rate)
+                    tvec2, azvec2 = scan_segment_rightleft(0.0, -np.pi, tvec1[-1], base_rate)
+                    tvec3, azvec3 = scan_segment_rightleft(np.pi, az_min, tvec2[-1], base_rate)
+                    tvec=np.concatenate((
+                                        tvec1,
+                                        tvec2 - tvec2[0] + tvec1[-1],
+                                        tvec3 - tvec3[0] + tvec2[-1] - tvec2[0] + tvec1[-1]
+                                    ))            
+                    azvec = np.concatenate((azvec1, azvec2, azvec3))
     else:
         t1 = t0 + scan_time - drift_time
         tvec = np.array([t0, t1])
@@ -638,7 +649,6 @@ def simulate_ces_scan_tot(
     # Duplicate the first scan enough times to cover the entire observation
     scan_pair_time=np.abs(tvec[-1]-tvec[0])
     n_repeat = int((t_stop - t_start) / scan_pair_time)
-    print(n_repeat)
     n_repeat += 2  # Margin for incomplete scans and randomized phase
     ## Mirror the arrays before repeating them
     tvec = tvec[:-1]
