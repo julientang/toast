@@ -200,6 +200,8 @@ class ScanHealpixDetectorMap(Operator):
                 # Load and sample the provided maps
                 for imap, file_name in enumerate(self.file_names):
                     current_file_name = file_name.format(**detector_properties)
+                    current_file_name = current_file_name.replace(" ", "")
+                    print(current_file_name)
                     if current_file_name != last_file_name:
                         # Load a new map
                         if not os.path.isfile(current_file_name):
