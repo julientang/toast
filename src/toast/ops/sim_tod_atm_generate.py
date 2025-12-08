@@ -808,7 +808,7 @@ class GenerateAtmosphere(Operator):
             if comm is not None:
                 vmin = comm.allreduce(vmin, op=MPI.MIN)
                 vmax = comm.allreduce(vmax, op=MPI.MAX)
-
+            log.debug_rank(f"{prefix}Plotting {len(my_snapshots)} snapshots", comm=comm)
             for t, r, atmdata2d in my_snapshots:
                 plt.figure(figsize=[12, 4])
                 plt.imshow(
