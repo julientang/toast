@@ -362,7 +362,7 @@ class SimAtmosphere(Operator):
             # In this case, the simulated slabs were written to disk but never stored
             # in the output data key.
             return
-        log.verbose(f"{log_prefix}, {data.comm.comm_world.rank} : Starting observation")
+        log.verbose(f"{log_prefix}, {data.comm.comm.world_rank} : Starting observation")
 
         # Observation key for storing absorption and loading
         absorption_key = f"{self.name}_absorption"
@@ -382,7 +382,7 @@ class SimAtmosphere(Operator):
             shared_flags = self.shared_flags
             shared_flag_mask = self.shared_flag_mask
 
-        log.verbose(f"{log_prefix}, {data.comm.comm_world.rank} :Finished observation setup")
+        log.verbose(f"{log_prefix}, {data.comm.comm.world_rank} :Finished observation setup")
 
         observe_atm = ObserveAtmosphere(
             times=self.times,

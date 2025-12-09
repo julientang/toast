@@ -453,7 +453,7 @@ class GenerateAtmosphere(Operator):
                 ob.intervals.create_col(
                     self.wind_intervals, wind_times, ob.shared[self.times]
                 )
-            log.verbose(f"{log_prefix}, {sdata.comm_world.rank} : created intervals")
+            log.verbose(f"{log_prefix}, {sdata.comm.world_rank} : created intervals")
         return output
 
     def _get_rng_keys(self, obs):
