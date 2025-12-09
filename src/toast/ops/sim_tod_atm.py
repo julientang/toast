@@ -362,7 +362,7 @@ class SimAtmosphere(Operator):
             # In this case, the simulated slabs were written to disk but never stored
             # in the output data key.
             return
-        log.verbose(f"{log_prefix}, {data.comm.comm.world_rank} : Starting observation")
+        log.verbose(f"{data.comm.world_rank} : Starting observation")
 
         # Observation key for storing absorption and loading
         absorption_key = f"{self.name}_absorption"
@@ -382,7 +382,7 @@ class SimAtmosphere(Operator):
             shared_flags = self.shared_flags
             shared_flag_mask = self.shared_flag_mask
 
-        log.verbose(f"{log_prefix}, {data.comm.comm.world_rank} :Finished observation setup")
+        log.verbose(f"{data.comm.world_rank} : Finished observation setup")
 
         observe_atm = ObserveAtmosphere(
             times=self.times,
@@ -414,6 +414,8 @@ class SimAtmosphere(Operator):
             if ob.name is None:
                 msg = "Atmosphere simulation requires each observation to have a name"
                 raise RuntimeError(msg)
+            
+            log.verbose(f"{data.comm.world_rank} : Finished observation setup")
 
             # Get the detectors we are using for this observation
             dets = ob.select_local_detectors(detectors, flagmask=self.det_mask)

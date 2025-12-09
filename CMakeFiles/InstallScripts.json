@@ -1,0 +1,34 @@
+{
+	"InstallScripts" : 
+	[
+		"/pscratch/sd/j/jtanglbl/toast/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/libtoast/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/libtoast/gtest/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/libtoast/gtest/googletest/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/pybind11/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/config/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/interactive/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/io/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/accelerator/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/tests/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/tests/helpers/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/jax/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/jax/math/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/pointing_detector/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/pixels_healpix/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/stokes_weights/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/mapmaker_utils/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/scan_map/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/noise_weight/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/ops/polyfilter/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/templates/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/templates/offset/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/scripts/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/src/toast/spt3g/cmake_install.cmake",
+		"/pscratch/sd/j/jtanglbl/toast/workflows/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
