@@ -167,6 +167,7 @@ class SolverRHS(Operator):
             det_data=det_temp,
             det_mask=self.binning.det_mask,
             det_flag_mask=self.binning.det_flag_mask,
+            det_data_units=self.det_data_units,
             view=pixels.view,
         )
 
@@ -446,6 +447,7 @@ class SolverLHS(Operator):
             det_data=self.det_temp,
             det_mask=self.binning.det_mask,
             det_flag_mask=self.binning.det_flag_mask,
+            det_data_units=self.det_data_units,
             view=pixels.view,
         )
 
